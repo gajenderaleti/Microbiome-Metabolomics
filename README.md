@@ -1,2 +1,2 @@
 # Microbiome-Metabolomics
-Microbiome-Metabolome interactions in Depression-Obesity
+Microbiome-Metabolome interaction analyses in Depression-Obesity
