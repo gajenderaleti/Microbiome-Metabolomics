@@ -1,9 +1,10 @@
 ---
 title: "R workflow"
-decontam: https://benjjneb.github.io/decontam/vignettes/decontam_intro.html
 author: "Gajender Aleti"
 date: "10/09/2020"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 Import libraries
@@ -21,6 +22,7 @@ shhh(library(afex))
 shhh(library(dplyr))
 shhh(library(ggplot2))
 shhh(library(readxl))
+shhh(library(tinytex))
 ```
 
 # Pearson correlations - associations among continuous and categorical metadata variables
@@ -38,6 +40,7 @@ pairs.panels(mat_map2[,-c(5, 6, 7, 8)], method="spearman", lm=TRUE, density=TRUE
 ```
 
 # Decontamination workflow
+decontam: https://benjjneb.github.io/decontam/vignettes/decontam_intro.html
 Identify contaminants in marker-gene and metagenomics data based on prevalence (contaminating DNA can come from several sources, such as the reagents). Prevalence (presence/absence across samples) of each sequence feature in true positive samples is compared to the prevalence in negative controls to identify contaminants
 Import ASV table, taxonomy and metadata files
 ```{r}
