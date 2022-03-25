@@ -1,0 +1,130 @@
+---
+title: "R workflow"
+decontam: https://benjjneb.github.io/decontam/vignettes/decontam_intro.html
+author: "Gajender Aleti"
+date: "10/09/2020"
+output: html_document
+---
+
+Import libraries
+```{r}
+shhh <- suppressPackageStartupMessages # It's a library, so shhh!
+shhh(library(psych))
+shhh(library(decontam))
+shhh(library(phyloseq))
+shhh(library(pairwiseAdonis))
+shhh(library(tidyverse))
+shhh(library(qiime2R))
+shhh(library(vegan))
+shhh(library(RVAideMemoire))
+shhh(library(afex))
+shhh(library(dplyr))
+shhh(library(ggplot2))
+shhh(library(readxl))
+```
+
+# Pearson correlations - associations among continuous and categorical metadata variables
+```{r}
+mapfile4<-read.csv("/home/gajender/Documents/R_files/map_file4.csv", header=T, sep=",", row.names=1)
+mapfile <- data.frame(mapfile4[,])
+mat_map2 <- mapfile[which(!duplicated(mapfile$anonymized_name)), c("Age", "BMI", "Total_fat", "Trunk_fat", "BDI_t", "BDI_s", "BDI_c", "baric")]
+mat_map2 <- as.data.frame(apply(mat_map2, 2, FUN = function(x){as.numeric(as.character(x))}))
+mat_map2$BDI_T <- log(mat_map2$BDI_t + 1)
+mat_map2$BDI_S <- log(mat_map2$BDI_s + 1)
+mat_map2$BDI_C <- log(mat_map2$BDI_c + 1)
+mat_map2$BARIC <- (mat_map2$baric)
+corr.test(as.matrix(mat_map2), method = "spearman", adjust = "fdr")
+pairs.panels(mat_map2[,-c(5, 6, 7, 8)], method="spearman", lm=TRUE, density=TRUE, ellipses=F, stars=T, cex.labels=1, cex=1)
+```
+
+# Decontamination workflow
+Identify contaminants in marker-gene and metagenomics data based on prevalence (contaminating DNA can come from several sources, such as the reagents). Prevalence (presence/absence across samples) of each sequence feature in true positive samples is compared to the prevalence in negative controls to identify contaminants
+Import ASV table, taxonomy and metadata files
+```{r}
+tax<-read.table("/home/gajender/Documents/projects/git/MicrobiomeDecontamination/taxonomy.tsv", sep= "\t", header=T, row.names=1)
+otu<-read.table("/home/gajender/Documents/projects/git/MicrobiomeDecontamination/feature-table.txt", sep= "\t", header=T, row.names=1)
+sample<-read.table("/home/gajender/Documents/projects/git/MicrobiomeDecontamination/metadata.txt", sep= "\t", header=T, row.names=1)
+OTU = otu_table(otu, taxa_are_rows = TRUE)
+TAX = tax_table(as.matrix(tax))
+sampledata= sample_data(as.data.frame(sample))
+```
+Generate a phyloseq object
+```{r}
+ps=phyloseq(OTU,sampledata,TAX)
+ps
+sample_data(ps)$is.neg <- sample_data(ps)$Sample_or_Control == "Control Sample"
+```
+Identify contaminants prevalence in blank and true samples with default setting
+```{r}
+contamdf.prev <- isContaminant(ps, method="prevalence", neg="is.neg")
+table(contamdf.prev$contaminant)
+head(which(contamdf.prev$contaminant))
+```
+Stringent fitering (threshold=0.5) to identify contaminant sequences that are more prevalent in negative controls than in positive samples
+```{r}
+contamdf.prev05 <- isContaminant(ps, method="prevalence", neg="is.neg", threshold=0.5)
+table(contamdf.prev05$contaminant)
+head(which(contamdf.prev05$contaminant))
+write.table(contamdf.prev05, file = "/home/gajender/Documents/projects/git/MicrobiomeDecontamination/contaminant_features-to-filter-out.txt", sep = "\t", row.names = TRUE, col.names = NA)
+```
+
+# Beta diversity analysis
+```{r}
+physeq<-qza_to_phyloseq("/home/gajender/Documents/R_files/re_analysis/sample-decontam-filtered-table.qza", "/home/gajender/Documents/R_files/re_analysis/rooted-tree.qza", "/home/gajender/Documents/R_files/re_analysis/taxonomy.qza","/home/gajender/Documents/R_files/re_analysis/metadata-Hong3.csv")
+```
+**PERMANOVA on weighted UniFrac distances**
+```{r}
+wUF.dist <- distance(physeq, method = "wunifrac")
+adonis_wUF<-adonis2(wUF.dist~as.numeric(age) + as.factor(sex) + as.factor(race) + as.factor(sample_collection_time_hongcode) + as.numeric(del8) + as.factor(bmicategory) + + as.factor(bditotalcategory) + as.factor(bmicat_bditotalcat), strata = physeq$anonymized_name, data=as(sample_data(physeq), "data.frame"), by="terms", permutations=999)
+adonis_wUF
+```
+**PERMANOVA on unweighted UniFrac distances**
+```{r}
+uUF.dist <- distance(physeq, method = "uunifrac")
+adonis_uUF<-adonis2(uUF.dist~as.numeric(age) + as.factor(sex) + as.factor(race) + as.factor(sample_collection_time_hongcode) + as.numeric(del8) + as.factor(bmicategory) + + as.factor(bditotalcategory) + as.factor(bmicat_bditotalcat), strata = physeq$anonymized_name, data=as(sample_data(physeq), "data.frame"), by="terms", permutations=999)
+adonis_uUF
+```
+**pairwiseAdonis on weighted UniFrac distances**
+```{r}
+pairwie_adonis_wUF<-pairwise.adonis2(wUF.dist ~ bmicat_bditotalcat, data = as(sample_data(physeq), "data.frame"), permutations = 999, by='terms', p.adjust.methods = "BH")
+pairwie_adonis_wUF
+```
+**pairwiseAdonis on unweighted UniFrac distances**
+```{r}
+pairwie_adonis_uUF<-pairwise.adonis2(uUF.dist ~ bmicat_bditotalcat, data = as(sample_data(physeq), "data.frame"), permutations = 999, by='terms', p.adjust.methods = "BH")
+pairwie_adonis_uUF
+```
+**Betadispersion**
+```{r}
+permutest(betadisper(wUF.dist, cbind(as(sample_data(physeq), "data.frame")$ bmicat_bditotalcat), bias.adjust=T), pairwise=T, permutations=999, strata = anonymized_name)
+```
+# Alpha diversity analysis
+**Alpha diversity plots**
+```{r}
+alpha_meas = c("Observed", "Shannon")
+p <- plot_richness(physeq, "bmicat_bditotalcat", measures=alpha_meas)
+p + geom_boxplot(data=p$physeq, aes(x=bmicat_bditotalcat, y=value, color=NULL), alpha=0.1)
+```
+
+**Alpha diversity stats - linear mixed effects model to account for repeated measurements**
+```{r}
+div.table<-read.table("~/Documents/projects/Salivary-Microbiome-Metabolome/Gajender-Analyses/Hong-Saliva-Microbiome/Analyses-01112019/diversity.csv", header=T, sep="\t", row.names=1)
+summary(lmer(faith_pd ~ sample_collection_time_hongcode+del8+bmi+log(bdi_total3+1) + bmicat_bditotalcat + (1|anonymized_name), data = div.table))
+```
+# Differential abundance analysis
+**linear mixed effects model on log-ratios of bacterial features (gram negative/gram positive) and BARIC inflammatory scores - generated from differential analysis**
+```{r}
+sample_plot_data_new <- read_excel("~/Documents/projects/Salivary-Microbiome-Metabolome/Gajender-Analyses/Manuscript05092020/sample_plot_data_new.xlsx", na = "null")
+model<-lmer(gram_Current_Natural_Log_Ratio ~ del8+bmicat_bditotalcat + (1|anonymized_name), data = sample_plot_data_new)
+summary(model)
+```
+**boxplot - log-ratios of bacterial features (gram negative/gram positive)**
+```{r}
+box <- ggplot(sample_plot_data_new, aes(x=bmicat_bditotalcat, y=gram_Current_Natural_Log_Ratio, fill=bmicat_bditotalcat)) + geom_boxplot(outlier.shape = NA) + theme_bw()
+box + geom_jitter (width = 0.1, alpha = 0.4) + scale_fill_manual(values=c("#008c38", "#0000ff", "#d98d36", "#ff0000"))
+```
+
+
+
+
+

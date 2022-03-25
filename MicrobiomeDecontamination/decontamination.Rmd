@@ -1,0 +1,43 @@
+---
+title: "Decontamination workflow"
+decontam: https://benjjneb.github.io/decontam/vignettes/decontam_intro.html
+author: "Gajender Aleti"
+date: "10/09/2020"
+output: html_document
+---
+Identify contaminants in marker-gene and metagenomics data based on prevalence (contaminating DNA can come from several sources, such as the reagents). Prevalence (presence/absence across samples) of each sequence feature in true positive samples is compared to the prevalence in negative controls to identify contaminants.
+
+Import libraries
+```{r}
+library(decontam)
+library(phyloseq)
+```
+Import ASV table, taxonomy and metadata files
+```{r}
+tax<-read.table("taxonomy.tsv", sep= "\t", header=T, row.names=1)
+otu<-read.table("feature-table.txt", sep= "\t", header=T, row.names=1)
+sample<-read.table("metadata.txt", sep= "\t", header=T, row.names=1)
+OTU = otu_table(otu, taxa_are_rows = TRUE)
+TAX = tax_table(as.matrix(tax))
+sampledata= sample_data(as.data.frame(sample))
+```
+Generate a phyloseq object
+```{r}
+ps=phyloseq(OTU,sampledata,TAX)
+ps
+sample_data(ps)$is.neg <- sample_data(ps)$Sample_or_Control == "Control Sample"
+```
+Identify contaminants prevalence in blank and true samples with default setting
+```{r}
+contamdf.prev <- isContaminant(ps, method="prevalence", neg="is.neg")
+table(contamdf.prev$contaminant)
+head(which(contamdf.prev$contaminant))
+```
+Stringent fitering (threshold=0.5) to identify contaminant sequences that are more prevalent in negative controls than in positive samples
+```{r}
+contamdf.prev05 <- isContaminant(ps, method="prevalence", neg="is.neg", threshold=0.5)
+table(contamdf.prev05$contaminant)
+head(which(contamdf.prev05$contaminant))
+write.table(contamdf.prev05, file = "contaminant_features-to-filter-out.txt", sep = "\t", row.names = TRUE, col.names = NA)
+```
+Are we humans or are we dancers?
