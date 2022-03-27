@@ -25,7 +25,7 @@ shhh(library(readxl))
 shhh(library(tinytex))
 ```
 
-# Pearson correlations - associations among continuous and categorical metadata variables
+# Spearman correlations - associations among continuous and categorical metadata variables
 ```{r}
 mapfile4<-read.csv("/home/gajender/Documents/R_files/map_file4.csv", header=T, sep=",", row.names=1)
 mapfile <- data.frame(mapfile4[,])
